@@ -1,0 +1,20 @@
+{
+  "name": "oakyjs",
+  "title": "oakyjs",
+  "version": "0.0.1",
+  "description": "ECS engine",
+  "author": "oakyjs",
+  "engines": {
+    "node": ">=0.8.x"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "webmake": "~0.3.19",
+    "grunt": "~0.4.1",
+    "grunt-contrib-watch": "~0.5.2",
+    "grunt-contrib-concat": "~0.3.0",
+    "grunt-contrib-jshint": "~0.6.3",
+    "grunt-contrib-uglify": "~0.2.2",
+    "grunt-mocha-phantomjs": "0.2.8"
+  }
+}
