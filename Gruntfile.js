@@ -14,8 +14,7 @@ module.exports = function (grunt) {
     paths: {
       lib: "lib/",
       tests: "test/",
-      dist: "dist/",
-      vendor: "vendor/"
+      dist: "dist/"
     },
 
     watch: {
@@ -30,10 +29,6 @@ module.exports = function (grunt) {
     },
 
     builder: {
-      lib: {
-        src: "<%= paths.lib %>index.js",
-        dest: "<%= paths.dist %>engine.js"
-      },
       all: {
         src: "<%= paths.lib %>index.js",
         dest: "<%= paths.dist %>oaky.js"
@@ -46,10 +41,6 @@ module.exports = function (grunt) {
     },
 
     concat: {
-      vendor: {
-        src: [ '<%= paths.vendor %>**/*.js' ],
-        dest: '<%= paths.dist %>vendor.js'
-      },
       app: {
         options: {
           stripBanners: {
@@ -152,6 +143,6 @@ module.exports = function (grunt) {
   grunt.registerTask("w", ["watcher", "watch:all"]);
   grunt.registerTask("t", ["tester", "watch:tests"]);
 
-  grunt.registerTask("dist", ["build", "uglify"]);
+  grunt.registerTask("dist", ["test", "uglify"]);
 
 };

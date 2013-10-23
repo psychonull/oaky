@@ -19,7 +19,7 @@
 	};
 	resolve = function (scope, tree, path, fullpath, state) {
 		var name, dir, exports, module, fn, found, i, ext;
-		path = path.split('/');
+		path = path.split(/[\\/]/);
 		name = path.pop();
 		if ((name === '.') || (name === '..')) {
 			path.push(name);
@@ -99,9 +99,9 @@
 				 * Taken from https://gist.github.com/davidaurelio/838778
 				 * more info at: http://uxebu.com/blog/2011/02/23/object-based-inheritance-for-ecmascript-5/
 				 */
-
+				
 				module.exports = {
-
+				
 				  create: function create() {
 				    var instance = Object.create(this);
 				    instance.initialize.apply(instance, arguments);
@@ -110,7 +110,7 @@
 				 
 				  extend: function extend(properties, propertyDescriptors) {
 				    propertyDescriptors = propertyDescriptors || {};
-
+				
 				    if(properties){
 				      var simpleProperties = Object.getOwnPropertyNames(properties);
 				      for (var i = 0, len = simpleProperties.length; i < len; i += 1) {
@@ -118,23 +118,23 @@
 				        if(propertyDescriptors.hasOwnProperty(propertyName)) {
 				          continue;
 				        }
-
+				
 				        propertyDescriptors[propertyName] =
 				          Object.getOwnPropertyDescriptor(properties, propertyName);
 				      }
 				    }
-
+				
 				    return Object.create(this, propertyDescriptors);
 				  },
-
+				
 				  initialize: function initialize() {},
-
+				
 				  _super: function _super(definedOn, methodName, args) {
 				    if (typeof methodName !== "string") {
 				      args = methodName;
 				      methodName = "initialize";
 				    }
-
+				
 				    return Object.getPrototypeOf(definedOn)[methodName].apply(this, args);
 				  }
 				};
@@ -142,135 +142,135 @@
 			"Entity.js": function (exports, module, require) {
 				
 				var Base = require('./Base');
-
+				
 				module.exports = Base.extend({
-
+				
 				  initialize: function(options){
 				    this.id = options.id;
 				    this.tags = [];
 				    this._components = {};
 				    this._events = {};
 				  },
-
+				
 				  /* Components */
-
+				
 				  on: function(evName, cb){
 				    this._events[evName] = cb;
 				  },
-
+				
 				  add: function(type, initialValue){
 				    this._components[type] = initialValue;
 				  },
-
+				
 				  get: function(type){
 				    //TODO: should not be able to change it (read-only access)
 				    return this._components[type];
 				  },
-
+				
 				  getAll: function(){
 				    return Object.keys(this._components);
 				  },
-
+				
 				  has: function(type){
 				    return this._components.hasOwnProperty(type);
 				  },
-
+				
 				  set: function(type, newValue){
 				    this._components[type] = newValue;
 				    return this;
 				  },
-
+				
 				  remove: function(type){
 				    delete this._components[type];
 				    return this;
 				  },
-
+				
 				  /* TAGS */
-
+				
 				  addTag: function(tag){
 				    if (!this.hasTag(tag)){
 				      this.tags.push(tag);
 				    }
 				    return this;
 				  },
-
+				
 				  removeTag: function(tag){
 				    if (this.hasTag(tag)){
 				      this.tags.splice(this.tags.indexOf(tag), 1);
 				    }
 				    return this;
 				  },
-
+				
 				  hasTag: function(tag){
 				    return this.tags.indexOf(tag) > -1 ? true : false;
 				  },
-
+				
 				  /* Others */
-
+				
 				  destroy: function(){
 				    if (this._events.destroy){
 				      this._events.destroy(this.id);
 				    }
 				  }
-
+				
 				});
 			},
 			"EntityManager.js": function (exports, module, require) {
 				
 				var Base = require('./Base')
 				  , Entity = require('./Entity');
-
+				
 				module.exports = Base.extend({
-
+				
 				  initialize: function(){
 				    this._entities = [];
 				    this.lastId = 0;
 				  },
-
+				
 				  make: function(){
 				    var entity = Entity.create({
 				      id: ++this.lastId
 				    });
-
+				
 				    entity.on('destroy', this.destroyEntity.bind(this));
 				    
 				    this._entities.push(entity);
 				    return entity;
 				  },
-
+				
 				  getById: function(id){
 				    for(var i=0; i<this._entities.length; i++){
 				      if (this._entities[i].id === id){
 				        return this._entities[i];
 				      }
 				    }
-
+				
 				    return null;
 				  },
-
+				
 				  getByComponents: function(components){
 				    var found = [];
-
+				
 				    function isValid(comps){
 				      for(var j=0; j<components.length; j++){
 				        if (comps.indexOf(components[j]) === -1){
 				          return false;
 				        }
 				      }
-
+				
 				      return true;
 				    }
-
+				
 				    for(var i=0; i<this._entities.length; i++){
 				      var comps = this._entities[i].getAll();
 				      if (isValid(comps)){
 				        found.push(this._entities[i]);
 				      }
 				    }
-
+				
 				    return found;
 				  },
-
+				
 				  get: function(idOrComponent){
 				    if (!isNaN(idOrComponent)){
 				      return this.getById(idOrComponent);
@@ -280,24 +280,24 @@
 				      return this.getByComponents(compos);
 				    }
 				  },
-
+				
 				  getTagged: function(tag){
 				    var found = [];
 				    var tags = Array.isArray(tag) ? tag : [tag];
-
+				
 				    for(var i=0; i<this._entities.length; i++){
-
+				
 				      for(var j=0; j<tags.length; j++){
-
+				
 				        if (this._entities[i].hasTag(tags[j])){
 				          found.push(this._entities[i]);
 				        }
 				      }
 				    }
-
+				
 				    return found;
 				  },
-
+				
 				  destroyEntity: function(id){
 				    for(var i=0; i<this._entities.length; i++){
 				      if (this._entities[i].id === id){
@@ -306,7 +306,7 @@
 				      }
 				    }
 				  }
-
+				
 				});
 			},
 			"Game.js": function (exports, module, require) {
@@ -314,74 +314,74 @@
 				var Base = require('./Base')
 				  , EntityManager = require('./EntityManager')
 				  , GameTime = require('./GameTime');
-
+				
 				module.exports = Base.extend({
-
+				
 				  initialize: function(/*options*/){
-
+				
 				    this._components = {};
 				    this._systems = [];
-
+				
 				    this.entities = EntityManager.create();
 				    this.gameTime = new GameTime();
-
+				
 				    this.tLoop = null;
 				    this.paused = false;
 				    this.boundGameRun = this.gameRun.bind(this);
 				  },
-
+				
 				  addSystem: function(system){
 				    system.game = this;
 				    this._systems.push(system);
 				  },
-
+				
 				  use: function(name, component){
 				    if (this._components.hasOwnProperty(name)){
 				      throw new Error("component '" + name + "' already exist");
 				    }
-
+				
 				    this._components[name] = component;
 				  },
-
+				
 				  process: function(){
 				    var time = this.gameTime.frameTime;
-
+				
 				    for(var i=0; i<this._systems.length; i++){
 				      var system = this._systems[i];
 				      var entities = this.entities._entities;
-
+				
 				      if (system.has && system.has.length > 0) {
 				        entities = this.entities.get(system.has);
 				      }
-
+				
 				      system.process(time, entities);
 				    }
 				  },
-
+				
 				  loop: function(){
 				    this.process();
 				  },
-
+				
 				  start: function(){
 				    this.paused = false;
 				    this.gameRun();
 				  },
-
+				
 				  stop: function(){
 				    this.paused = true;
 				    window.cancelAnimationFrame(this.tLoop);
 				  },
-
+				
 				  gameRun: function(){
 				    if (this.gameTime.tick()) { this.loop(); }
 				    this.tLoop = window.requestAnimationFrame(this.boundGameRun);
 				  }
-
+				
 				});
 			},
 			"GameTime.js": function (exports, module, require) {
 				// Manages the ticks for a Game Loop
-
+				
 				var GameTime = module.exports = function(){
 				  this.lastTime = Date.now();
 				  this.frameTime = 0;
@@ -389,29 +389,29 @@
 				  this.minFrameTime = 12; 
 				  this.time = 0;
 				};
-
+				
 				// move the clock one tick. 
 				// return true if new frame, false otherwise.
 				GameTime.prototype.tick = function() {
 				  var now = Date.now();
 				  var delta = now - this.lastTime;
-
+				
 				  if (delta < this.minFrameTime ) {
 				    return false;
 				  }
-
+				
 				  if (delta > 2 * this.typicalFrameTime) { // +1 frame if too much time elapsed
 				     this.frameTime = this.typicalFrameTime;
 				  } else {  
 				    this.frameTime = delta;      
 				  }
-
+				
 				  this.time += this.frameTime;
 				  this.lastTime = now;
-
+				
 				  return true;
 				};
-
+				
 				GameTime.prototype.reset = function() {
 				  this.lastTime = Date.now();
 				  this.frameTime = 0;
@@ -422,75 +422,86 @@
 			},
 			"System.js": function (exports, module, require) {
 				/*jslint unused: false */
-
+				
 				var Base = require('./Base');
-
+				
 				module.exports = Base.extend({
-
+				
 				  has: [],
 				  
 				  //TODO: build filters by Tag
 				  //tagged: [],
-
+				
 				  initialize: function(options){ },
 				  process: function(delta, entities) { }
-
+				
 				});
 			}
 		},
 		"test": {
+			"Engine.specs.js": function (exports, module, require) {
+				module.exports = function(){
+				
+				  describe('Engine', function(){
+				
+				    it ('should test the engine access');
+				
+				  });
+				
+				};
+			},
 			"Entity.specs.js": function (exports, module, require) {
 				
 				module.exports = function(){
 				  var Entity = require("../lib/Entity");
-
+				
 				  describe("Entity", function(){
 				    var entity;
-
+				
 				    before(function(){
 				      entity = Entity.create({
 				        id: 1
 				      });
 				    });
-
+				
 				    describe("Components", function(){
-
+				
 				      describe("#add", function(){
 				        
 				        it ("should add a component", function(){
 				          expect(entity.add).to.be.a("function");
-
+				
 				          entity.add("position", { x:0, y: 0 });
 				          expect(entity._components).to.be.a("object");
 				          expect(entity._components["position"]).to.be.eql({ x:0, y: 0 });
 				        });
-
+				
 				        it ("should validate if the component exists");
 				        it ("should create a component with default values");
-
+				
 				      });
-
+				
 				      describe("#get", function(){
 				        
 				        it ("should get a component's value by type", function(){
 				          entity.add("velocity", { dx: 5, dy: 5 });
-
+				
 				          expect(entity.get).to.be.a("function");
-
+				
 				          var c = entity.get("velocity");
-
+				
 				          expect(c).to.be.a("object");
 				          expect(c.dx).to.be.equal(5);
 				          expect(c.dy).to.be.equal(5);
 				        });
-
+				
 				      });
-
+				
 				      describe("#getAll", function(){
 				        
 				        it ("should an array with all current component types supported", function(){
 				          expect(entity.getAll).to.be.a("function");
-
+				
 				          var comps = entity.getAll();
 				          expect(comps).to.be.an("array");
 				          expect(comps.length).to.be.equal(2);
@@ -500,105 +511,105 @@
 				        });
 				        
 				      });
-
+				
 				      describe("#has", function(){
 				        
 				        it ("should return true or false if the entity has a component type", function(){
 				          expect(entity.has).to.be.a("function");
-
+				
 				          expect(entity.has("position")).to.be.equal(true);
 				          expect(entity.has("velocity")).to.be.equal(true);
 				          expect(entity.has("xcomponent")).to.be.equal(false);
 				        });
 				        
 				      });
-
+				
 				      describe("#set", function(){
 				        
 				        it ("should set a component's value by type", function(){
 				          expect(entity.set).to.be.a("function");
-
+				
 				          var cv = entity.get("velocity");
-
+				
 				          cv.dx = 7;
 				          cv.dy = 8;
-
+				
 				          entity.set("velocity", cv);
-
+				
 				          cv = entity.get("velocity")
 				          expect(cv).to.be.a("object");
 				          expect(cv.dx).to.be.equal(7);
 				          expect(cv.dy).to.be.equal(8);
 				        });
-
+				
 				        it ("should validate the data");
 				        
 				      });
-
+				
 				      describe("#remove", function(){
 				        
 				        it ("should remove a component", function(){
 				          expect(entity.remove).to.be.a("function");
-
+				
 				          entity.remove("velocity");
-
+				
 				          expect(entity.has("velocity")).to.be.equal(false);
 				          expect(entity.get("velocity")).to.not.be.ok();
 				          
 				          expect(entity.has("position")).to.be.equal(true);
 				        });
-
+				
 				        it ("should validate the data");
 				        
 				      });
 				    });
-
+				
 				    describe("Tags", function(){
-
+				
 				      describe("#addTag", function(){
 				        
 				        it ("should add a tag", function(){
 				          expect(entity.addTag).to.be.a("function");
-
+				
 				          entity.addTag("player");
 				          entity.addTag("monster");
 				          expect(entity.tags).to.be.an("array");
 				          expect(entity.tags.length).to.be.equal(2);
 				        });
-
+				
 				      });
-
+				
 				      describe("#removeTag", function(){
 				        
 				        it ("should remove a tag", function(){
 				          expect(entity.removeTag).to.be.a("function");
-
+				
 				          entity.removeTag("player");
 				          expect(entity.tags).to.be.an("array");
 				          expect(entity.tags.length).to.be.equal(1);
 				        });
-
+				
 				      });
-
+				
 				      describe("#hasTag", function(){
 				        
 				        it ("should tell if it has a tag", function(){
 				          expect(entity.hasTag).to.be.a("function");
-
+				
 				          expect(entity.hasTag("player")).to.be.equal(false);
 				          expect(entity.hasTag("monster")).to.be.equal(true);
 				        });
-
+				
 				      });
-
+				
 				    });
-
+				
 				    describe("#destroy", function(){
 				      it('should allow to be destroyed', function(){
 				        expect(entity.destroy).to.be.a("function");
 				      });
 				    });
-
+				
 				  });
 				};
 			},
@@ -606,31 +617,31 @@
 				
 				module.exports = function(){
 				  var EntityManager = require("../lib/EntityManager");
-
+				
 				  describe("EntityManager", function(){
 				    var entities;
-
+				
 				    before(function(){
 				      entities = EntityManager.create();
 				    });
-
+				
 				    describe("#make", function(){
-
+				
 				      it ("should create an Entity and return it", function(){
 				        expect(entities.make).to.be.a("function");
-
+				
 				        var entity = entities.make();
 				        expect(entity.id).to.be.greaterThan(0);
-
+				
 				        expect(entities._entities).to.be.an("array");
 				        expect(entities._entities[0].id).to.be.equal(entity.id);
 				      });
-
+				
 				    });
-
+				
 				    describe("#get", function(){
 				      var ids = [];
-
+				
 				      before(function(){
 				        var entity;
 				        
@@ -639,57 +650,57 @@
 				        entity.add("size");
 				        entity.add("velocity");
 				        ids.push(entity.id);
-
+				
 				        entity = entities.make();
 				        entity.add("position");
 				        ids.push(entity.id);
-
+				
 				        entity = entities.make();
 				        entity.add("controls");
 				        ids.push(entity.id);
 				      });
-
+				
 				      it("should return an entity by id if a integer is passed", function(){
 				        expect(entities.get).to.be.a("function");
-
+				
 				        var found = entities.get(ids[0]);
 				        expect(found.id).to.be.equal(ids[0]);
 				      });
-
+				
 				      it("should return an array of entities by ONE component if a string is passed", function(){
 				        expect(entities.get).to.be.a("function");
-
+				
 				        var found = entities.get("position");
 				        expect(found).to.be.an("array");
 				        expect(found.length).to.be.equal(2);
 				        expect(found[0].id).to.be.equal(ids[0]);
 				        expect(found[1].id).to.be.equal(ids[1]);
-
+				
 				        found = entities.get("velocity");
 				        expect(found).to.be.an("array");
 				        expect(found.length).to.be.equal(1);
 				        expect(found[0].id).to.be.equal(ids[0]);
 				      });
-
+				
 				      it("should return an array of entities by components if an array is passed", function(){
 				        expect(entities.get).to.be.a("function");
-
+				
 				        var found = entities.get(["position"]);
 				        expect(found).to.be.an("array");
 				        expect(found.length).to.be.equal(2);
 				        expect(found[0].id).to.be.equal(ids[0]);
 				        expect(found[1].id).to.be.equal(ids[1]);
-
+				
 				        var found = entities.get(["position", "size"]);
 				        expect(found).to.be.an("array");
 				        expect(found.length).to.be.equal(1);
 				      });
-
+				
 				    });
-
+				
 				    describe("#getTagged", function(){
 				      var ids = [];
-
+				
 				      before(function(){
 				        var entity;
 				        
@@ -697,39 +708,39 @@
 				        entity.addTag("animal");
 				        entity.addTag("bird");
 				        ids.push(entity.id);
-
+				
 				        entity = entities.make();
 				        entity.addTag("animal");
 				        ids.push(entity.id);
-
+				
 				        entity = entities.make();
 				        entity.addTag("dog");
 				        ids.push(entity.id);
 				      });
-
+				
 				      it("should return an array of entities by tag", function(){
 				        expect(entities.getTagged).to.be.a("function");
-
+				
 				        var found = entities.getTagged("animal");
 				        expect(found).to.be.an("array");
 				        expect(found.length).to.be.equal(2);
 				        expect(found[0].id).to.be.equal(ids[0]);
 				        expect(found[1].id).to.be.equal(ids[1]);
-
+				
 				        found = entities.getTagged("bird");
 				        expect(found).to.be.an("array");
 				        expect(found.length).to.be.equal(1);
 				        expect(found[0].id).to.be.equal(ids[0]);
-
+				
 				        found = entities.getTagged(["bird", "dog"]);
 				        expect(found).to.be.an("array");
 				        expect(found.length).to.be.equal(2);
 				        expect(found[0].id).to.be.equal(ids[0]);
 				        expect(found[1].id).to.be.equal(ids[2]);
 				      });
-
+				
 				    });
-
+				
 				  });
 				};
 			},
@@ -737,85 +748,96 @@
 				
 				var System = require('../lib/System');
 				var MovementSystem = System.extend({
-
+				
 				  initialize: function(options){
 				    this.gravity = options.gravity;
 				  },
-
+				
 				  process: function(){ }
-
+				
 				});
-
+				
 				module.exports = function(){
-
+				
 				  var Game = require('../lib/Game');
 				  
 				  describe('Game', function(){
 				    var game;
-
+				
 				    before(function(){
 				      game = Game.create();
 				    });
-
+				
 				    describe('#addSystem', function(){
 				      
 				      it ('should allow to add systems', function(){
 				        expect(game.addSystem).to.be.a('function');
-
+				
 				        game.addSystem(MovementSystem.create({ gravity: 1.5 }));
-
+				
 				        expect(game._systems).to.be.an('array');
 				        expect(game._systems.length).to.be.equal(1);
-
+				
 				        expect(game._systems[0].gravity).to.be.equal(1.5);
 				      });
-
+				
 				    });
-
+				
 				    describe('#use', function(){
-
+				
 				      it ('should allow to register one component', function(){
 				        expect(game.use).to.be.a('function');
-
+				
 				        var defaultPosition = { x: 0, y:0 };
 				        game.use('position', defaultPosition);
 				        expect(game._components['position']).to.be.eql(defaultPosition);
 				      });
-
+				
 				      it ('should throw an Error if the component already exists', function(){
 				        expect(function(){
 				          game.use('position', {});  
 				        }).to.throwError();
 				      });
-
+				
 				      it ('should allow to register a collection of components');
-
+				
 				    });
-
+				
 				    describe('#start', function(){
 				      it('should expose a start method to run the game loop', function(){
 				        expect(game.start).to.be.a('function');
 				      });
 				    });
-
+				
 				    describe('#stop', function(){
 				      it('should expose a stop method to stop the game loop', function(){
 				        expect(game.stop).to.be.a('function');
 				      });
 				    });
-
-
+				
+				
 				  });
+				};
+			},
+			"System.specs.js": function (exports, module, require) {
+				module.exports = function(){
+				
+				  describe('System', function(){
+				
+				    it ('should test the systems');
+				
+				  });
+				
 				};
 			},
 			"runner.js": function (exports, module, require) {
 				
 				require('./Entity.specs')();
 				require('./EntityManager.specs')();
-				//require('./System.specs')();
+				require('./System.specs')();
 				require('./Game.specs')();
-				//require('./Engine.specs')();
-
+				require('./Engine.specs')();
+				
 				if (window.mochaPhantomJS) { mochaPhantomJS.run(); }
 				else { mocha.run(); }
 			}
