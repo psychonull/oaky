@@ -12,35 +12,37 @@ npm install
 
 Run the following command at root of project
 
-### Develop Enviroment
+### Compile dist/oaky.js
 
 ```bash
 grunt
 ```
 
-### Stagging Enviroment
+### Compile dist/oaky.min.js
 
 ```bash
-grunt stage
+grunt dist
 ```
 
-### Production Enviroment (Stagging and minified)
+### Run Tests
 
 ```bash
-grunt prod
+grunt test
 ```
-
-*these 3 commands will compile all the project and leave the compiled files ```/dist```*
 
 ### FileSystem Watcher
 
-> Only for Develop Enviroment
-
 To set a watcher, so you wont need to be running ```grunt``` every time a change is made, run:
+
+**Only compile oaky.js**
 
 ```bash
 grunt w
 ```
 
-*So, everytime a file is saved inside ```/game``` it will run the compilation again*
+**Compile oaky.js and run tests**
+
+```bash
+grunt t
+```
 
