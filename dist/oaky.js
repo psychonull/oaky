@@ -145,8 +145,9 @@
 				
 				module.exports = Base.extend({
 				
-				  initialize: function(options){
-				    this.id = options.id;
+				  initialize: function(){
+				    this.id = null;
+				    this.index = -1;
 				    this.tags = [];
 				    this._components = {};
 				    this._events = {};
@@ -185,6 +186,15 @@
 				    return this;
 				  },
 				
+				  clear: function(){
+				    for (var c in this._components){
+				      if (this._components.hasOwnProperty(c)){
+				        this.remove(c);
+				      }
+				    }
+				    return this;
+				  },
+				
 				  /* TAGS */
 				
 				  addTag: function(tag){
@@ -208,8 +218,11 @@
 				  /* Others */
 				
 				  destroy: function(){
+				    this.tags = [];
+				    this.clear();
+				
 				    if (this._events.destroy){
-				      this._events.destroy(this.id);
+				      this._events.destroy(this);
 				    }
 				  }
 				
@@ -222,20 +235,30 @@
 				
 				module.exports = Base.extend({
 				
-				  initialize: function(){
+				  initialize: function(options){
+				    options = options || {};
 				    this._entities = [];
 				    this.lastId = 0;
+				
+				    this.poolSize = 0;
+				    this.marker = 0;
+				
+				    var poolSize = (options.poolSize) || 1000;
+				    this.expandPool(poolSize);
+				
+				    this.poolSize = poolSize;
 				  },
 				
 				  make: function(){
-				    var entity = Entity.create({
-				      id: ++this.lastId
-				    });
+				    if (this.marker >= this.poolSize) {
+				      this.expandPool(this.poolSize * 2);
+				    }
 				
-				    entity.on('destroy', this.destroyEntity.bind(this));
-				    
-				    this._entities.push(entity);
-				    return entity;
+				    var obj = this._entities[this.marker++];
+				    obj.index = this.marker - 1;
+				    obj.id = ++this.lastId;
+				
+				    return obj;
 				  },
 				
 				  getById: function(id){
@@ -261,9 +284,9 @@
 				      return true;
 				    }
 				
-				    for(var i=0; i<this._entities.length; i++){
+				    for(var i=this._entities.length; i--;){
 				      var comps = this._entities[i].getAll();
-				      if (isValid(comps)){
+				      if (this._entities[i].id && isValid(comps)){
 				        found.push(this._entities[i]);
 				      }
 				    }
@@ -285,12 +308,12 @@
 				    var found = [];
 				    var tags = Array.isArray(tag) ? tag : [tag];
 				
-				    for(var i=0; i<this._entities.length; i++){
-				
-				      for(var j=0; j<tags.length; j++){
-				
-				        if (this._entities[i].hasTag(tags[j])){
-				          found.push(this._entities[i]);
+				    for (var i = this._entities.length; i--;) {
+				      if (this._entities[i].id){
+				        for(var j=tags.length; j--;){
+				          if (this._entities[i].hasTag(tags[j])){
+				            found.push(this._entities[i]);
+				          }
 				        }
 				      }
 				    }
@@ -298,13 +321,34 @@
 				    return found;
 				  },
 				
-				  destroyEntity: function(id){
-				    for(var i=0; i<this._entities.length; i++){
-				      if (this._entities[i].id === id){
-				        this._entities.splice(i, 1);
-				        return;
-				      }
+				  expandPool: function(newSize) {
+				
+				    var self = this;
+				    function destroy(entity){
+				      self.destroyEntity(entity);
 				    }
+				
+				    for (var i = newSize - this.poolSize; i--;) {
+				      var obj = Entity.create();
+				      obj.on('destroy', destroy);
+				      this._entities.push(obj);
+				    }
+				
+				    this.poolSize = newSize;
+				  },
+				
+				  destroyEntity: function(entity){
+				    this.marker--;
+				
+				    var end = this._entities[this.marker];
+				    var endIndex = end.index;
+				
+				    this._entities[this.marker] = entity;
+				    this._entities[entity.index] = end;
+				    entity.id = null;
+				
+				    end.index = entity.index;
+				    entity.index = endIndex;
 				  }
 				
 				});
@@ -317,12 +361,14 @@
 				
 				module.exports = Base.extend({
 				
-				  initialize: function(/*options*/){
+				  initialize: function(options){
+				    options = options || {};
 				
 				    this._components = {};
 				    this._systems = [];
 				
-				    this.entities = EntityManager.create();
+				    this.entities = EntityManager.create(options.poolSize);
+				
 				    this.gameTime = new GameTime();
 				
 				    this.tLoop = null;
@@ -344,7 +390,6 @@
 				  },
 				
 				  process: function(){
-				    var time = this.gameTime.frameTime;
 				
 				    for(var i=0; i<this._systems.length; i++){
 				      var system = this._systems[i];
@@ -353,8 +398,17 @@
 				      if (system.has && system.has.length > 0) {
 				        entities = this.entities.get(system.has);
 				      }
+				      else {
+				        var ents = entities;
+				        entities = [];
+				        for(var j=ents.length; j--;){
+				          if (ents[i].id){
+				            entities.push(ents[i]);
+				          }
+				        }
+				      }
 				
-				      system.process(time, entities);
+				      system.process(this.gameTime.frameTime, entities);
 				    }
 				  },
 				

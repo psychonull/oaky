@@ -12,6 +12,9 @@ var game = oaky.createGame({
 });
 ```
 
+**Game Options:**
+`poolSize` : `Number` (_default_: `1000` ) Max object for the object pool. Increases by double when run out of space.
+
 #### Creating Entities
 Entities are holders of components, and has a unique id. To create a new entity it must be get from the Entity Manager of the game:
 

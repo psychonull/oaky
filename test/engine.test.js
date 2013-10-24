@@ -145,8 +145,9 @@
 				
 				module.exports = Base.extend({
 				
-				  initialize: function(options){
-				    this.id = options.id;
+				  initialize: function(){
+				    this.id = null;
+				    this.index = -1;
 				    this.tags = [];
 				    this._components = {};
 				    this._events = {};
@@ -185,6 +186,15 @@
 				    return this;
 				  },
 				
+				  clear: function(){
+				    for (var c in this._components){
+				      if (this._components.hasOwnProperty(c)){
+				        this.remove(c);
+				      }
+				    }
+				    return this;
+				  },
+				
 				  /* TAGS */
 				
 				  addTag: function(tag){
@@ -208,8 +218,11 @@
 				  /* Others */
 				
 				  destroy: function(){
+				    this.tags = [];
+				    this.clear();
+				
 				    if (this._events.destroy){
-				      this._events.destroy(this.id);
+				      this._events.destroy(this);
 				    }
 				  }
 				
@@ -222,20 +235,30 @@
 				
 				module.exports = Base.extend({
 				
-				  initialize: function(){
+				  initialize: function(options){
+				    options = options || {};
 				    this._entities = [];
 				    this.lastId = 0;
+				
+				    this.poolSize = 0;
+				    this.marker = 0;
+				
+				    var poolSize = (options.poolSize) || 1000;
+				    this.expandPool(poolSize);
+				
+				    this.poolSize = poolSize;
 				  },
 				
 				  make: function(){
-				    var entity = Entity.create({
-				      id: ++this.lastId
-				    });
+				    if (this.marker >= this.poolSize) {
+				      this.expandPool(this.poolSize * 2);
+				    }
 				
-				    entity.on('destroy', this.destroyEntity.bind(this));
-				    
-				    this._entities.push(entity);
-				    return entity;
+				    var obj = this._entities[this.marker++];
+				    obj.index = this.marker - 1;
+				    obj.id = ++this.lastId;
+				
+				    return obj;
 				  },
 				
 				  getById: function(id){
@@ -261,9 +284,9 @@
 				      return true;
 				    }
 				
-				    for(var i=0; i<this._entities.length; i++){
+				    for(var i=this._entities.length; i--;){
 				      var comps = this._entities[i].getAll();
-				      if (isValid(comps)){
+				      if (this._entities[i].id && isValid(comps)){
 				        found.push(this._entities[i]);
 				      }
 				    }
@@ -285,12 +308,12 @@
 				    var found = [];
 				    var tags = Array.isArray(tag) ? tag : [tag];
 				
-				    for(var i=0; i<this._entities.length; i++){
-				
-				      for(var j=0; j<tags.length; j++){
-				
-				        if (this._entities[i].hasTag(tags[j])){
-				          found.push(this._entities[i]);
+				    for (var i = this._entities.length; i--;) {
+				      if (this._entities[i].id){
+				        for(var j=tags.length; j--;){
+				          if (this._entities[i].hasTag(tags[j])){
+				            found.push(this._entities[i]);
+				          }
 				        }
 				      }
 				    }
@@ -298,13 +321,34 @@
 				    return found;
 				  },
 				
-				  destroyEntity: function(id){
-				    for(var i=0; i<this._entities.length; i++){
-				      if (this._entities[i].id === id){
-				        this._entities.splice(i, 1);
-				        return;
-				      }
+				  expandPool: function(newSize) {
+				
+				    var self = this;
+				    function destroy(entity){
+				      self.destroyEntity(entity);
 				    }
+				
+				    for (var i = newSize - this.poolSize; i--;) {
+				      var obj = Entity.create();
+				      obj.on('destroy', destroy);
+				      this._entities.push(obj);
+				    }
+				
+				    this.poolSize = newSize;
+				  },
+				
+				  destroyEntity: function(entity){
+				    this.marker--;
+				
+				    var end = this._entities[this.marker];
+				    var endIndex = end.index;
+				
+				    this._entities[this.marker] = entity;
+				    this._entities[entity.index] = end;
+				    entity.id = null;
+				
+				    end.index = entity.index;
+				    entity.index = endIndex;
 				  }
 				
 				});
@@ -317,12 +361,14 @@
 				
 				module.exports = Base.extend({
 				
-				  initialize: function(/*options*/){
+				  initialize: function(options){
+				    options = options || {};
 				
 				    this._components = {};
 				    this._systems = [];
 				
-				    this.entities = EntityManager.create();
+				    this.entities = EntityManager.create(options.poolSize);
+				
 				    this.gameTime = new GameTime();
 				
 				    this.tLoop = null;
@@ -344,7 +390,6 @@
 				  },
 				
 				  process: function(){
-				    var time = this.gameTime.frameTime;
 				
 				    for(var i=0; i<this._systems.length; i++){
 				      var system = this._systems[i];
@@ -353,8 +398,17 @@
 				      if (system.has && system.has.length > 0) {
 				        entities = this.entities.get(system.has);
 				      }
+				      else {
+				        var ents = entities;
+				        entities = [];
+				        for(var j=ents.length; j--;){
+				          if (ents[i].id){
+				            entities.push(ents[i]);
+				          }
+				        }
+				      }
 				
-				      system.process(time, entities);
+				      system.process(this.gameTime.frameTime, entities);
 				    }
 				  },
 				
@@ -619,10 +673,11 @@
 				  var EntityManager = require("../lib/EntityManager");
 				
 				  describe("EntityManager", function(){
-				    var entities;
+				    var entities, poolSize = 1000;
 				
 				    before(function(){
-				      entities = EntityManager.create();
+				      entities = EntityManager.create(poolSize);
+				      expect(entities._entities.length).to.be.equal(poolSize);
 				    });
 				
 				    describe("#make", function(){
@@ -634,6 +689,7 @@
 				        expect(entity.id).to.be.greaterThan(0);
 				
 				        expect(entities._entities).to.be.an("array");
+				        expect(entities._entities.length).to.be.equal(poolSize);
 				        expect(entities._entities[0].id).to.be.equal(entity.id);
 				      });
 				
@@ -673,8 +729,8 @@
 				        var found = entities.get("position");
 				        expect(found).to.be.an("array");
 				        expect(found.length).to.be.equal(2);
-				        expect(found[0].id).to.be.equal(ids[0]);
-				        expect(found[1].id).to.be.equal(ids[1]);
+				        expect(found[0].id).to.be.equal(ids[1]);
+				        expect(found[1].id).to.be.equal(ids[0]);
 				
 				        found = entities.get("velocity");
 				        expect(found).to.be.an("array");
@@ -688,12 +744,22 @@
 				        var found = entities.get(["position"]);
 				        expect(found).to.be.an("array");
 				        expect(found.length).to.be.equal(2);
-				        expect(found[0].id).to.be.equal(ids[0]);
-				        expect(found[1].id).to.be.equal(ids[1]);
+				        expect(found[0].id).to.be.equal(ids[1]);
+				        expect(found[1].id).to.be.equal(ids[0]);
 				
 				        var found = entities.get(["position", "size"]);
 				        expect(found).to.be.an("array");
 				        expect(found.length).to.be.equal(1);
+				      });
+				
+				      it("should allow to destroy an entity from the pool", function(){
+				        for(var i=0; i < ids.length; i++){
+				          var ent = entities.get(ids[i]);
+				          ent.destroy();
+				
+				          expect(ent.id).to.be.equal(null);
+				          expect(entities._entities.length).to.be.equal(poolSize);
+				        }
 				      });
 				
 				    });
@@ -724,8 +790,8 @@
 				        var found = entities.getTagged("animal");
 				        expect(found).to.be.an("array");
 				        expect(found.length).to.be.equal(2);
-				        expect(found[0].id).to.be.equal(ids[0]);
-				        expect(found[1].id).to.be.equal(ids[1]);
+				        expect(found[0].id).to.be.equal(ids[1]);
+				        expect(found[1].id).to.be.equal(ids[0]);
 				
 				        found = entities.getTagged("bird");
 				        expect(found).to.be.an("array");
@@ -735,8 +801,8 @@
 				        found = entities.getTagged(["bird", "dog"]);
 				        expect(found).to.be.an("array");
 				        expect(found.length).to.be.equal(2);
-				        expect(found[0].id).to.be.equal(ids[0]);
-				        expect(found[1].id).to.be.equal(ids[2]);
+				        expect(found[0].id).to.be.equal(ids[2]);
+				        expect(found[1].id).to.be.equal(ids[0]);
 				      });
 				
 				    });
@@ -820,11 +886,42 @@
 				};
 			},
 			"System.specs.js": function (exports, module, require) {
+				
+				var Game = require('../lib/Game');
+				var System = require('../lib/System');
+				
+				var SystemTest = System.extend({
+				
+				  has: ['position', 'velocity'],
+				
+				  initialize: function(options) {
+				    this.gravity = 0.5;
+				  },
+				
+				  process: function(delta, entities) {
+				
+				  }
+				
+				});
+				
 				module.exports = function(){
+				  var game;
+				
+				  before(function(){
+				
+				    game = Game.create({
+				      poolSize: 500
+				    });
+				
+				    game.addSystem(SystemTest.create());
+				    
+				  });
 				
 				  describe('System', function(){
 				
-				    it ('should test the systems');
+				    it ('should test the systems', function(){
+				      
+				    });
 				
 				  });
 				
