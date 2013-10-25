@@ -231,40 +231,42 @@
 			"EntityManager.js": function (exports, module, require) {
 				
 				var Base = require('./Base')
-				  , Entity = require('./Entity');
+				  , Entity = require('./Entity')
+				  , Pool = require('./Pool');
 				
 				module.exports = Base.extend({
 				
 				  initialize: function(options){
 				    options = options || {};
-				    this._entities = [];
 				    this.lastId = 0;
 				
-				    this.poolSize = 0;
-				    this.marker = 0;
+				    var self = this;
+				    function Allocator() {
+				      var obj = Entity.create();
+				      obj.on('destroy', function(entity){
+				        self.destroyEntity(entity);
+				      });
+				      return obj;
+				    }
 				
-				    var poolSize = (options.poolSize) || 1000;
-				    this.expandPool(poolSize);
+				    function Resetor(obj, index) {
+				      obj.index = index;
+				      obj.id = ++self.lastId;
+				    }
 				
-				    this.poolSize = poolSize;
+				    this.pool = new Pool(Allocator, Resetor);
 				  },
 				
 				  make: function(){
-				    if (this.marker >= this.poolSize) {
-				      this.expandPool(this.poolSize * 2);
-				    }
-				
-				    var obj = this._entities[this.marker++];
-				    obj.index = this.marker - 1;
-				    obj.id = ++this.lastId;
-				
-				    return obj;
+				    return this.pool.create();
 				  },
 				
 				  getById: function(id){
-				    for(var i=0; i<this._entities.length; i++){
-				      if (this._entities[i].id === id){
-				        return this._entities[i];
+				    var els = this.pool.elems;
+				
+				    for(var i=0; i<els.length; i++){
+				      if (els[i].id === id){
+				        return els[i];
 				      }
 				    }
 				
@@ -273,6 +275,7 @@
 				
 				  getByComponents: function(components){
 				    var found = [];
+				    var els = this.pool.elems;
 				
 				    function isValid(comps){
 				      for(var j=0; j<components.length; j++){
@@ -284,10 +287,10 @@
 				      return true;
 				    }
 				
-				    for(var i=this._entities.length; i--;){
-				      var comps = this._entities[i].getAll();
-				      if (this._entities[i].id && isValid(comps)){
-				        found.push(this._entities[i]);
+				    for(var i=els.length; i--;){
+				      var comps = els[i].getAll();
+				      if (els[i].id && isValid(comps)){
+				        found.push(els[i]);
 				      }
 				    }
 				
@@ -307,12 +310,13 @@
 				  getTagged: function(tag){
 				    var found = [];
 				    var tags = Array.isArray(tag) ? tag : [tag];
+				    var els = this.pool.elems;
 				
-				    for (var i = this._entities.length; i--;) {
-				      if (this._entities[i].id){
+				    for (var i = els.length; i--;) {
+				      if (els[i].id){
 				        for(var j=tags.length; j--;){
-				          if (this._entities[i].hasTag(tags[j])){
-				            found.push(this._entities[i]);
+				          if (els[i].hasTag(tags[j])){
+				            found.push(els[i]);
 				          }
 				        }
 				      }
@@ -321,34 +325,9 @@
 				    return found;
 				  },
 				
-				  expandPool: function(newSize) {
-				
-				    var self = this;
-				    function destroy(entity){
-				      self.destroyEntity(entity);
-				    }
-				
-				    for (var i = newSize - this.poolSize; i--;) {
-				      var obj = Entity.create();
-				      obj.on('destroy', destroy);
-				      this._entities.push(obj);
-				    }
-				
-				    this.poolSize = newSize;
-				  },
-				
 				  destroyEntity: function(entity){
-				    this.marker--;
-				
-				    var end = this._entities[this.marker];
-				    var endIndex = end.index;
-				
-				    this._entities[this.marker] = entity;
-				    this._entities[entity.index] = end;
 				    entity.id = null;
-				
-				    end.index = entity.index;
-				    entity.index = endIndex;
+				    this.pool.discard(entity.index);
 				  }
 				
 				});
@@ -374,6 +353,7 @@
 				    this.tLoop = null;
 				    this.paused = false;
 				    this.boundGameRun = this.gameRun.bind(this);
+				    this.ents = [];
 				  },
 				
 				  addSystem: function(system){
@@ -393,22 +373,21 @@
 				
 				    for(var i=0; i<this._systems.length; i++){
 				      var system = this._systems[i];
-				      var entities = this.entities._entities;
+				      var entities = this.entities.pool.elems;
 				
 				      if (system.has && system.has.length > 0) {
 				        entities = this.entities.get(system.has);
+				        system.process(this.gameTime.frameTime, entities);
 				      }
 				      else {
-				        var ents = entities;
-				        entities = [];
-				        for(var j=ents.length; j--;){
-				          if (ents[i].id){
-				            entities.push(ents[i]);
+				        this.ents.length = 0;
+				        for(var j=entities.length; j--;){
+				          if (entities[j].id){
+				            this.ents.push(entities[j]);
 				          }
 				        }
+				        system.process(this.gameTime.frameTime, entities);
 				      }
-				
-				      system.process(this.gameTime.frameTime, entities);
 				    }
 				  },
 				
@@ -474,6 +453,119 @@
 				  this.time = 0;
 				};
 			},
+			"Pool.js": function (exports, module, require) {
+				
+				// Taken from https://github.com/miohtama/objectpool.js
+				
+				// Used this as a skeleton
+				// https://github.com/substack/mocha-testling-ci-example/tree/master/test
+				
+				/**
+				 * Generic object pool for Javascript.
+				 *
+				 * @param {Function} allocator return new empty elements
+				 *
+				 * @param {Function} resetor resetor(obj, index) is called on all new elements when they are (re)allocated from pool.
+				 *                   This is mostly useful for making object to track its own pool index.
+				 */
+				function Pool(allocator, resetor) {
+				    // Start with one element
+				    this.allocator = allocator;
+				    this.resetor = resetor;
+				    // Set initial state of 1 object
+				    this.elems[0] = this.allocator();
+				    this.freeElems = [0];
+				}
+				
+				Pool.prototype = {
+				
+				    /** How fast we grow */
+				    expandFactor : 0.2,
+				
+				    /** Minimum number of items we grow */
+				    expandMinUnits : 16,
+				
+				    elems : [],
+				
+				    /** List of discarded element indexes in our this.elems pool */
+				    freeElems : [],
+				
+				    /**
+				     * @return {[type]} [description]
+				     */
+				    create : function() {
+				
+				        if(!this.freeElems.length) {
+				            this.expand();
+				        }
+				
+				        // See if we have any allocated elements to reuse
+				        var index = this.freeElems.pop();
+				        var elem = this.elems[index];
+				        this.resetor(elem, index);
+				        return elem;
+				
+				    },
+				
+				    /**
+				     * How many allocated units we have
+				     *
+				     * @type {Number}
+				     */
+				    get length() {
+				        return this.elems.length - this.freeElems.length;
+				    },
+				
+				    /**
+				     * Make pool bigger by the default growth parameters.
+				     *
+				     */
+				    expand : function() {
+				
+				        var oldSize = this.elems.length;
+				
+				        var growth = Math.ceil(this.elems.length * this.expandFactor);
+				
+				        if(growth < this.expandMinUnits) {
+				            growth = this.expandMinUnits;
+				        }
+				
+				        this.elems.length = this.elems.length + growth;
+				
+				        for(var i=oldSize; i<this.elems.length; i++) {
+				            this.elems[i] = this.allocator();
+				            this.freeElems.push(i);
+				        }
+				    },
+				
+				    /**
+				     * Deallocate object at index n
+				     *
+				     * @param  {Number} n
+				     * @return {Object} discarded object
+				     */
+				    discard : function(n) {
+				
+				        // Cannot double deallocate
+				        if(this.freeElems.indexOf(n) >= 0) {
+				            return;
+				        }
+				
+				        this.freeElems.push(n);
+				    },
+				
+				    /**
+				     * Return object at pool index n
+				     */
+				    get : function(n) {
+				        return this.elems[n];
+				    }
+				
+				
+				};
+				
+				module.exports = Pool;
+			},
 			"System.js": function (exports, module, require) {
 				/*jslint unused: false */
 				
@@ -495,12 +587,13 @@
 				
 				var Game = require('./Game');
 				
-				window.oaky = {
-				  createGame: function(options){
-				    return Game.create(options);
-				  },
-				  System: require('./System')
+				window.oaky = window.oaky || {};
+				
+				window.oaky.createGame = function(options){
+				  return Game.create(options);
 				};
+				
+				window.oaky.System = require('./System');
 			}
 		}
 	}

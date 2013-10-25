@@ -3,11 +3,10 @@ module.exports = function(){
   var EntityManager = require("../lib/EntityManager");
 
   describe("EntityManager", function(){
-    var entities, poolSize = 1000;
+    var entities;
 
     before(function(){
-      entities = EntityManager.create(poolSize);
-      expect(entities._entities.length).to.be.equal(poolSize);
+      entities = EntityManager.create();
     });
 
     describe("#make", function(){
@@ -18,9 +17,8 @@ module.exports = function(){
         var entity = entities.make();
         expect(entity.id).to.be.greaterThan(0);
 
-        expect(entities._entities).to.be.an("array");
-        expect(entities._entities.length).to.be.equal(poolSize);
-        expect(entities._entities[0].id).to.be.equal(entity.id);
+        expect(entities.pool.elems).to.be.an("array");
+        expect(entities.pool.elems[0].id).to.be.equal(entity.id);
       });
 
     });
@@ -59,13 +57,10 @@ module.exports = function(){
         var found = entities.get("position");
         expect(found).to.be.an("array");
         expect(found.length).to.be.equal(2);
-        expect(found[0].id).to.be.equal(ids[1]);
-        expect(found[1].id).to.be.equal(ids[0]);
-
+        
         found = entities.get("velocity");
         expect(found).to.be.an("array");
         expect(found.length).to.be.equal(1);
-        expect(found[0].id).to.be.equal(ids[0]);
       });
 
       it("should return an array of entities by components if an array is passed", function(){
@@ -74,8 +69,6 @@ module.exports = function(){
         var found = entities.get(["position"]);
         expect(found).to.be.an("array");
         expect(found.length).to.be.equal(2);
-        expect(found[0].id).to.be.equal(ids[1]);
-        expect(found[1].id).to.be.equal(ids[0]);
 
         var found = entities.get(["position", "size"]);
         expect(found).to.be.an("array");
@@ -88,7 +81,6 @@ module.exports = function(){
           ent.destroy();
 
           expect(ent.id).to.be.equal(null);
-          expect(entities._entities.length).to.be.equal(poolSize);
         }
       });
 
@@ -120,19 +112,14 @@ module.exports = function(){
         var found = entities.getTagged("animal");
         expect(found).to.be.an("array");
         expect(found.length).to.be.equal(2);
-        expect(found[0].id).to.be.equal(ids[1]);
-        expect(found[1].id).to.be.equal(ids[0]);
 
         found = entities.getTagged("bird");
         expect(found).to.be.an("array");
         expect(found.length).to.be.equal(1);
-        expect(found[0].id).to.be.equal(ids[0]);
 
         found = entities.getTagged(["bird", "dog"]);
         expect(found).to.be.an("array");
         expect(found.length).to.be.equal(2);
-        expect(found[0].id).to.be.equal(ids[2]);
-        expect(found[1].id).to.be.equal(ids[0]);
       });
 
     });

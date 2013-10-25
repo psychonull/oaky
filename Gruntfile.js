@@ -93,13 +93,7 @@ module.exports = function (grunt) {
             , document: true
             , require: true
             , module: true
-            , $: true
-            , jQuery: true
-            , _: true
-            , Howl: true
-            , Howler: true
             , console: true
-            , moment: true
             , oaky: true
           }
         }
