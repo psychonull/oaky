@@ -386,7 +386,7 @@
 				            this.ents.push(entities[j]);
 				          }
 				        }
-				        system.process(this.gameTime.frameTime, entities);
+				        system.process(this.gameTime.frameTime, this.ents);
 				      }
 				    }
 				  },
