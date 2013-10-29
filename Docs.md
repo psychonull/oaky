@@ -8,12 +8,12 @@ TODO: Show the inclusion of the oaky script into html.
 
 ```javascript
 var game = oaky.createGame({
-  //options
+  //settings -> any setting you need at game level
+  viewSize: 500
 });
-```
 
-**Game Options:**
-`poolSize` : `Number` (_default_: `1000` ) Max object for the object pool. Increases by double when run out of space.
+console.log(game.viewSize); // 500
+```
 
 #### Creating Entities
 Entities are holders of components, and has a unique id. To create a new entity it must be get from the Entity Manager of the game:
@@ -29,6 +29,10 @@ Components are the data contained inside an entity, like position, velocity, etc
 ```javascript
 player.add('position', { x: 100, y: 100 });
 player.has('position'); // true
+
+// also method 'is' as synonymous for 'has'
+player.add('animal');
+player.is('animal'); // true
 
 var pos = player.get('position').x;
 pos.x++;
@@ -50,7 +54,7 @@ var MovementSystem = oaky.System.extend({
 
     // optional: provide the components which 
     // are gonna be used by the system.
-    has: ['position', 'velocity'],
+    uses: ['position', 'velocity'],
   
     // optional: constructor
     initialize: function(options) { },
@@ -69,23 +73,22 @@ Now we need to create and add the system to the game:
 
 ```javascript
 var movement = MovementSystem.create({ /* options */ });
-game.addSystem(movement);
+game.addSystem("movement", movement);
 ```
 
 > the order in which the systems are added to the game is how they are executed.
 
-#### Tagging
-Tags are just strings, they can be use to group a set of entities or just to "flag" them.
-
-There are times where you may need to retrieve all the entities that are enemies to check a shoot collision, or flag an enemy as "hit" by a shoot to make some cool stuff from other system with it, so tagging could be very usefull for that kind of things.
-
+### Enabling and Disabling Systems
 ```javascript
-var enemy = game.entities.make();
-enemy.addTag('enemy');
 
-enemy.hasTag('enemy'); //true
+movement.enabled();
+movement.disabled();
 
-enemy.removeTag('enemy');
+// or from the Game instance
+
+this.game.enable("movement");
+this.game.disable("movement");
+
 ```
 
 #### Managing Entities
@@ -97,9 +100,6 @@ game.entities.get(12345); // by id
 game.entities.get('position'); // by component
 
 game.entities.get(['position', 'velocity']); // by components (AND)
-
-game.entities.getTagged('enemy'); //by tag
-game.entities.getTagged(['enemy', 'duck']); //by tags (AND)
 
 entitiy.destroy(); //remove the entity from the manager
 ```

@@ -18,7 +18,17 @@ module.exports = function(){
     var game;
 
     before(function(){
-      game = Game.create();
+      game = Game.create({
+        testOption: 12345,
+        testOptObj: {
+          x: 10,
+          y: 60
+        }
+      });
+
+      expect(game.testOption).to.be.equal(12345);
+      expect(game.testOptObj.x).to.be.equal(10);
+      expect(game.testOptObj.y).to.be.equal(60);
     });
 
     describe('#addSystem', function(){
@@ -26,11 +36,12 @@ module.exports = function(){
       it ('should allow to add systems', function(){
         expect(game.addSystem).to.be.a('function');
 
-        game.addSystem(MovementSystem.create({ gravity: 1.5 }));
+        game.addSystem("movement", MovementSystem.create({ gravity: 1.5 }));
 
         expect(game._systems).to.be.an('array');
         expect(game._systems.length).to.be.equal(1);
 
+        expect(game._systemsByName["movement"]).to.be.ok();
         expect(game._systems[0].gravity).to.be.equal(1.5);
       });
 
@@ -52,8 +63,24 @@ module.exports = function(){
         }).to.throwError();
       });
 
-      it ('should allow to register a collection of components');
+    });
 
+    describe('#disable', function(){
+      it ('should allow to disable a system by name', function(){
+        expect(game.disable).to.be.a('function');
+
+        game.disable("movement");
+        expect(game._systems[0].enabled).to.be.equal(false);
+      });
+    });
+
+    describe('#enable', function(){
+      it ('should allow to enable a system by name', function(){
+        expect(game.enable).to.be.a('function');
+
+        game.enable("movement");
+        expect(game._systems[0].enabled).to.be.equal(true);
+      });
     });
 
     describe('#start', function(){

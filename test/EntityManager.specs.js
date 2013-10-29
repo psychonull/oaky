@@ -86,43 +86,5 @@ module.exports = function(){
 
     });
 
-    describe("#getTagged", function(){
-      var ids = [];
-
-      before(function(){
-        var entity;
-        
-        entity = entities.make();
-        entity.addTag("animal");
-        entity.addTag("bird");
-        ids.push(entity.id);
-
-        entity = entities.make();
-        entity.addTag("animal");
-        ids.push(entity.id);
-
-        entity = entities.make();
-        entity.addTag("dog");
-        ids.push(entity.id);
-      });
-
-      it("should return an array of entities by tag", function(){
-        expect(entities.getTagged).to.be.a("function");
-
-        var found = entities.getTagged("animal");
-        expect(found).to.be.an("array");
-        expect(found.length).to.be.equal(2);
-
-        found = entities.getTagged("bird");
-        expect(found).to.be.an("array");
-        expect(found.length).to.be.equal(1);
-
-        found = entities.getTagged(["bird", "dog"]);
-        expect(found).to.be.an("array");
-        expect(found.length).to.be.equal(2);
-      });
-
-    });
-
   });
 };

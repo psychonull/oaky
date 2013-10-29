@@ -13,6 +13,8 @@ module.exports = function(){
 
     describe("Components", function(){
 
+      it("should work with a component pool");
+
       describe("#add", function(){
         
         it ("should add a component", function(){
@@ -22,9 +24,6 @@ module.exports = function(){
           expect(entity._components).to.be.a("object");
           expect(entity._components["position"]).to.be.eql({ x:0, y: 0 });
         });
-
-        it ("should validate if the component exists");
-        it ("should create a component with default values");
 
       });
 
@@ -71,6 +70,18 @@ module.exports = function(){
         
       });
 
+      describe("#is", function(){
+        
+        it ("should return true or false if the entity has a component type", function(){
+          expect(entity.is).to.be.a("function");
+
+          expect(entity.is("position")).to.be.equal(true);
+          expect(entity.is("velocity")).to.be.equal(true);
+          expect(entity.is("xcomponent")).to.be.equal(false);
+        });
+        
+      });
+
       describe("#set", function(){
         
         it ("should set a component's value by type", function(){
@@ -88,8 +99,6 @@ module.exports = function(){
           expect(cv.dx).to.be.equal(7);
           expect(cv.dy).to.be.equal(8);
         });
-
-        it ("should validate the data");
         
       });
 
@@ -106,49 +115,7 @@ module.exports = function(){
           expect(entity.has("position")).to.be.equal(true);
         });
 
-        it ("should validate the data");
-        
       });
-    });
-
-    describe("Tags", function(){
-
-      describe("#addTag", function(){
-        
-        it ("should add a tag", function(){
-          expect(entity.addTag).to.be.a("function");
-
-          entity.addTag("player");
-          entity.addTag("monster");
-          expect(entity.tags).to.be.an("array");
-          expect(entity.tags.length).to.be.equal(2);
-        });
-
-      });
-
-      describe("#removeTag", function(){
-        
-        it ("should remove a tag", function(){
-          expect(entity.removeTag).to.be.a("function");
-
-          entity.removeTag("player");
-          expect(entity.tags).to.be.an("array");
-          expect(entity.tags.length).to.be.equal(1);
-        });
-
-      });
-
-      describe("#hasTag", function(){
-        
-        it ("should tell if it has a tag", function(){
-          expect(entity.hasTag).to.be.a("function");
-
-          expect(entity.hasTag("player")).to.be.equal(false);
-          expect(entity.hasTag("monster")).to.be.equal(true);
-        });
-
-      });
-
     });
 
     describe("#destroy", function(){

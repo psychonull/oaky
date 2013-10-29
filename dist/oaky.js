@@ -148,7 +148,6 @@
 				  initialize: function(){
 				    this.id = null;
 				    this.index = -1;
-				    this.tags = [];
 				    this._components = {};
 				    this._events = {};
 				  },
@@ -176,6 +175,10 @@
 				    return this._components.hasOwnProperty(type);
 				  },
 				
+				  is: function(type){
+				    return this.has(type);
+				  },
+				
 				  set: function(type, newValue){
 				    this._components[type] = newValue;
 				    return this;
@@ -195,30 +198,9 @@
 				    return this;
 				  },
 				
-				  /* TAGS */
-				
-				  addTag: function(tag){
-				    if (!this.hasTag(tag)){
-				      this.tags.push(tag);
-				    }
-				    return this;
-				  },
-				
-				  removeTag: function(tag){
-				    if (this.hasTag(tag)){
-				      this.tags.splice(this.tags.indexOf(tag), 1);
-				    }
-				    return this;
-				  },
-				
-				  hasTag: function(tag){
-				    return this.tags.indexOf(tag) > -1 ? true : false;
-				  },
-				
 				  /* Others */
 				
 				  destroy: function(){
-				    this.tags = [];
 				    this.clear();
 				
 				    if (this._events.destroy){
@@ -236,12 +218,11 @@
 				
 				module.exports = Base.extend({
 				
-				  initialize: function(options){
-				    options = options || {};
+				  initialize: function(){
 				    this.lastId = 0;
 				
 				    var self = this;
-				    function Allocator() {
+				    function allocator() {
 				      var obj = Entity.create();
 				      obj.on('destroy', function(entity){
 				        self.destroyEntity(entity);
@@ -249,16 +230,16 @@
 				      return obj;
 				    }
 				
-				    function Resetor(obj, index) {
+				    function resetor(obj, index) {
 				      obj.index = index;
 				      obj.id = ++self.lastId;
 				    }
 				
-				    this.pool = new Pool(Allocator, Resetor);
+				    this.pool = Pool.create(allocator, resetor);
 				  },
 				
 				  make: function(){
-				    return this.pool.create();
+				    return this.pool.make();
 				  },
 				
 				  getById: function(id){
@@ -307,24 +288,6 @@
 				    }
 				  },
 				
-				  getTagged: function(tag){
-				    var found = [];
-				    var tags = Array.isArray(tag) ? tag : [tag];
-				    var els = this.pool.elems;
-				
-				    for (var i = els.length; i--;) {
-				      if (els[i].id){
-				        for(var j=tags.length; j--;){
-				          if (els[i].hasTag(tags[j])){
-				            found.push(els[i]);
-				          }
-				        }
-				      }
-				    }
-				
-				    return found;
-				  },
-				
 				  destroyEntity: function(entity){
 				    entity.id = null;
 				    this.pool.discard(entity.index);
@@ -341,12 +304,19 @@
 				module.exports = Base.extend({
 				
 				  initialize: function(options){
-				    options = options || {};
+				
+				    for (var opt in options){
+				      if (options.hasOwnProperty(opt)){
+				        this[opt] = options[opt];
+				      }
+				    }
 				
 				    this._components = {};
-				    this._systems = [];
 				
-				    this.entities = EntityManager.create(options.poolSize);
+				    this._systems = [];
+				    this._systemsByName = {};
+				
+				    this.entities = EntityManager.create();
 				
 				    this.gameTime = new GameTime();
 				
@@ -356,9 +326,18 @@
 				    this.ents = [];
 				  },
 				
-				  addSystem: function(system){
-				    system.game = this;
+				  addSystem: function(name, system){
+				    if (!system){
+				      throw new Error("A system was expected");
+				    }
+				
+				    if (this._systemsByName.hasOwnProperty(name)){
+				      throw new Error("Duplicated system name " + name); 
+				    }
+				
+				    this._systemsByName[name] = system;
 				    this._systems.push(system);
+				    system.game = this;  
 				  },
 				
 				  use: function(name, component){
@@ -373,10 +352,15 @@
 				
 				    for(var i=0; i<this._systems.length; i++){
 				      var system = this._systems[i];
+				      
+				      if (!system.enabled){
+				        continue;
+				      }
+				
 				      var entities = this.entities.pool.elems;
 				
-				      if (system.has && system.has.length > 0) {
-				        entities = this.entities.get(system.has);
+				      if (system.uses && system.uses.length > 0) {
+				        entities = this.entities.get(system.uses);
 				        system.process(this.gameTime.frameTime, entities);
 				      }
 				      else {
@@ -388,6 +372,18 @@
 				        }
 				        system.process(this.gameTime.frameTime, this.ents);
 				      }
+				    }
+				  },
+				
+				  enable: function(systemName){
+				    if (this._systemsByName.hasOwnProperty(systemName)){
+				      this._systemsByName[systemName].enabled = true;
+				    }
+				  },
+				
+				  disable: function(systemName){
+				    if (this._systemsByName.hasOwnProperty(systemName)){
+				      this._systemsByName[systemName].enabled = false;
 				    }
 				  },
 				
@@ -455,116 +451,80 @@
 			},
 			"Pool.js": function (exports, module, require) {
 				
-				// Taken from https://github.com/miohtama/objectpool.js
+				var Base = require('./Base');
 				
-				// Used this as a skeleton
-				// https://github.com/substack/mocha-testling-ci-example/tree/master/test
+				module.exports = Base.extend({
 				
-				/**
-				 * Generic object pool for Javascript.
-				 *
-				 * @param {Function} allocator return new empty elements
-				 *
-				 * @param {Function} resetor resetor(obj, index) is called on all new elements when they are (re)allocated from pool.
-				 *                   This is mostly useful for making object to track its own pool index.
-				 */
-				function Pool(allocator, resetor) {
+				  // How fast we grow 
+				  expandFactor : 0.2,
+				
+				  // Minimum number of items we grow 
+				  expandMinUnits : 16,
+				
+				  elems : [],
+				
+				  // List of discarded element indexes in our this.elems pool 
+				  freeElems : [],
+				  
+				  initialize: function(allocator, resetor){
 				    // Start with one element
 				    this.allocator = allocator;
 				    this.resetor = resetor;
 				    // Set initial state of 1 object
 				    this.elems[0] = this.allocator();
 				    this.freeElems = [0];
-				}
+				  },
 				
-				Pool.prototype = {
-				
-				    /** How fast we grow */
-				    expandFactor : 0.2,
-				
-				    /** Minimum number of items we grow */
-				    expandMinUnits : 16,
-				
-				    elems : [],
-				
-				    /** List of discarded element indexes in our this.elems pool */
-				    freeElems : [],
-				
-				    /**
-				     * @return {[type]} [description]
-				     */
-				    create : function() {
-				
-				        if(!this.freeElems.length) {
-				            this.expand();
-				        }
-				
-				        // See if we have any allocated elements to reuse
-				        var index = this.freeElems.pop();
-				        var elem = this.elems[index];
-				        this.resetor(elem, index);
-				        return elem;
-				
-				    },
-				
-				    /**
-				     * How many allocated units we have
-				     *
-				     * @type {Number}
-				     */
-				    get length() {
-				        return this.elems.length - this.freeElems.length;
-				    },
-				
-				    /**
-				     * Make pool bigger by the default growth parameters.
-				     *
-				     */
-				    expand : function() {
-				
-				        var oldSize = this.elems.length;
-				
-				        var growth = Math.ceil(this.elems.length * this.expandFactor);
-				
-				        if(growth < this.expandMinUnits) {
-				            growth = this.expandMinUnits;
-				        }
-				
-				        this.elems.length = this.elems.length + growth;
-				
-				        for(var i=oldSize; i<this.elems.length; i++) {
-				            this.elems[i] = this.allocator();
-				            this.freeElems.push(i);
-				        }
-				    },
-				
-				    /**
-				     * Deallocate object at index n
-				     *
-				     * @param  {Number} n
-				     * @return {Object} discarded object
-				     */
-				    discard : function(n) {
-				
-				        // Cannot double deallocate
-				        if(this.freeElems.indexOf(n) >= 0) {
-				            return;
-				        }
-				
-				        this.freeElems.push(n);
-				    },
-				
-				    /**
-				     * Return object at pool index n
-				     */
-				    get : function(n) {
-				        return this.elems[n];
+				  make: function() {
+				    if(!this.freeElems.length) {
+				      this.expand();
 				    }
 				
+				    // See if we have any allocated elements to reuse
+				    var index = this.freeElems.pop();
+				    var elem = this.elems[index];
+				    this.resetor(elem, index);
+				    return elem;
+				  },
 				
-				};
+				  getLength: function() {
+				    return this.elems.length - this.freeElems.length;
+				  },
 				
-				module.exports = Pool;
+				  expand : function() {
+				
+				    var oldSize = this.elems.length;
+				
+				    var growth = Math.ceil(this.elems.length * this.expandFactor);
+				
+				    if(growth < this.expandMinUnits) {
+				      growth = this.expandMinUnits;
+				    }
+				
+				    this.elems.length = this.elems.length + growth;
+				
+				    for(var i=oldSize; i<this.elems.length; i++) {
+				      this.elems[i] = this.allocator();
+				      this.freeElems.push(i);
+				    }
+				  },
+				
+				  discard : function(n) {
+				
+				    // Cannot double deallocate
+				    if(this.freeElems.indexOf(n) >= 0) {
+				      return;
+				    }
+				
+				    this.freeElems.push(n);
+				  },
+				
+				  // Return object at pool index n
+				  get : function(n) {
+				    return this.elems[n];
+				  }
+				
+				});
 			},
 			"System.js": function (exports, module, require) {
 				/*jslint unused: false */
@@ -573,11 +533,9 @@
 				
 				module.exports = Base.extend({
 				
-				  has: [],
+				  uses: [],
+				  enabled: true,
 				  
-				  //TODO: build filters by Tag
-				  //tagged: [],
-				
 				  initialize: function(options){ },
 				  process: function(delta, entities) { }
 				

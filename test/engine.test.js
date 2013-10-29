@@ -148,7 +148,6 @@
 				  initialize: function(){
 				    this.id = null;
 				    this.index = -1;
-				    this.tags = [];
 				    this._components = {};
 				    this._events = {};
 				  },
@@ -176,6 +175,10 @@
 				    return this._components.hasOwnProperty(type);
 				  },
 				
+				  is: function(type){
+				    return this.has(type);
+				  },
+				
 				  set: function(type, newValue){
 				    this._components[type] = newValue;
 				    return this;
@@ -195,30 +198,9 @@
 				    return this;
 				  },
 				
-				  /* TAGS */
-				
-				  addTag: function(tag){
-				    if (!this.hasTag(tag)){
-				      this.tags.push(tag);
-				    }
-				    return this;
-				  },
-				
-				  removeTag: function(tag){
-				    if (this.hasTag(tag)){
-				      this.tags.splice(this.tags.indexOf(tag), 1);
-				    }
-				    return this;
-				  },
-				
-				  hasTag: function(tag){
-				    return this.tags.indexOf(tag) > -1 ? true : false;
-				  },
-				
 				  /* Others */
 				
 				  destroy: function(){
-				    this.tags = [];
 				    this.clear();
 				
 				    if (this._events.destroy){
@@ -236,12 +218,11 @@
 				
 				module.exports = Base.extend({
 				
-				  initialize: function(options){
-				    options = options || {};
+				  initialize: function(){
 				    this.lastId = 0;
 				
 				    var self = this;
-				    function Allocator() {
+				    function allocator() {
 				      var obj = Entity.create();
 				      obj.on('destroy', function(entity){
 				        self.destroyEntity(entity);
@@ -249,16 +230,16 @@
 				      return obj;
 				    }
 				
-				    function Resetor(obj, index) {
+				    function resetor(obj, index) {
 				      obj.index = index;
 				      obj.id = ++self.lastId;
 				    }
 				
-				    this.pool = new Pool(Allocator, Resetor);
+				    this.pool = Pool.create(allocator, resetor);
 				  },
 				
 				  make: function(){
-				    return this.pool.create();
+				    return this.pool.make();
 				  },
 				
 				  getById: function(id){
@@ -307,24 +288,6 @@
 				    }
 				  },
 				
-				  getTagged: function(tag){
-				    var found = [];
-				    var tags = Array.isArray(tag) ? tag : [tag];
-				    var els = this.pool.elems;
-				
-				    for (var i = els.length; i--;) {
-				      if (els[i].id){
-				        for(var j=tags.length; j--;){
-				          if (els[i].hasTag(tags[j])){
-				            found.push(els[i]);
-				          }
-				        }
-				      }
-				    }
-				
-				    return found;
-				  },
-				
 				  destroyEntity: function(entity){
 				    entity.id = null;
 				    this.pool.discard(entity.index);
@@ -341,12 +304,19 @@
 				module.exports = Base.extend({
 				
 				  initialize: function(options){
-				    options = options || {};
+				
+				    for (var opt in options){
+				      if (options.hasOwnProperty(opt)){
+				        this[opt] = options[opt];
+				      }
+				    }
 				
 				    this._components = {};
-				    this._systems = [];
 				
-				    this.entities = EntityManager.create(options.poolSize);
+				    this._systems = [];
+				    this._systemsByName = {};
+				
+				    this.entities = EntityManager.create();
 				
 				    this.gameTime = new GameTime();
 				
@@ -356,9 +326,18 @@
 				    this.ents = [];
 				  },
 				
-				  addSystem: function(system){
-				    system.game = this;
+				  addSystem: function(name, system){
+				    if (!system){
+				      throw new Error("A system was expected");
+				    }
+				
+				    if (this._systemsByName.hasOwnProperty(name)){
+				      throw new Error("Duplicated system name " + name); 
+				    }
+				
+				    this._systemsByName[name] = system;
 				    this._systems.push(system);
+				    system.game = this;  
 				  },
 				
 				  use: function(name, component){
@@ -373,10 +352,15 @@
 				
 				    for(var i=0; i<this._systems.length; i++){
 				      var system = this._systems[i];
+				      
+				      if (!system.enabled){
+				        continue;
+				      }
+				
 				      var entities = this.entities.pool.elems;
 				
-				      if (system.has && system.has.length > 0) {
-				        entities = this.entities.get(system.has);
+				      if (system.uses && system.uses.length > 0) {
+				        entities = this.entities.get(system.uses);
 				        system.process(this.gameTime.frameTime, entities);
 				      }
 				      else {
@@ -388,6 +372,18 @@
 				        }
 				        system.process(this.gameTime.frameTime, this.ents);
 				      }
+				    }
+				  },
+				
+				  enable: function(systemName){
+				    if (this._systemsByName.hasOwnProperty(systemName)){
+				      this._systemsByName[systemName].enabled = true;
+				    }
+				  },
+				
+				  disable: function(systemName){
+				    if (this._systemsByName.hasOwnProperty(systemName)){
+				      this._systemsByName[systemName].enabled = false;
 				    }
 				  },
 				
@@ -455,116 +451,80 @@
 			},
 			"Pool.js": function (exports, module, require) {
 				
-				// Taken from https://github.com/miohtama/objectpool.js
+				var Base = require('./Base');
 				
-				// Used this as a skeleton
-				// https://github.com/substack/mocha-testling-ci-example/tree/master/test
+				module.exports = Base.extend({
 				
-				/**
-				 * Generic object pool for Javascript.
-				 *
-				 * @param {Function} allocator return new empty elements
-				 *
-				 * @param {Function} resetor resetor(obj, index) is called on all new elements when they are (re)allocated from pool.
-				 *                   This is mostly useful for making object to track its own pool index.
-				 */
-				function Pool(allocator, resetor) {
+				  // How fast we grow 
+				  expandFactor : 0.2,
+				
+				  // Minimum number of items we grow 
+				  expandMinUnits : 16,
+				
+				  elems : [],
+				
+				  // List of discarded element indexes in our this.elems pool 
+				  freeElems : [],
+				  
+				  initialize: function(allocator, resetor){
 				    // Start with one element
 				    this.allocator = allocator;
 				    this.resetor = resetor;
 				    // Set initial state of 1 object
 				    this.elems[0] = this.allocator();
 				    this.freeElems = [0];
-				}
+				  },
 				
-				Pool.prototype = {
-				
-				    /** How fast we grow */
-				    expandFactor : 0.2,
-				
-				    /** Minimum number of items we grow */
-				    expandMinUnits : 16,
-				
-				    elems : [],
-				
-				    /** List of discarded element indexes in our this.elems pool */
-				    freeElems : [],
-				
-				    /**
-				     * @return {[type]} [description]
-				     */
-				    create : function() {
-				
-				        if(!this.freeElems.length) {
-				            this.expand();
-				        }
-				
-				        // See if we have any allocated elements to reuse
-				        var index = this.freeElems.pop();
-				        var elem = this.elems[index];
-				        this.resetor(elem, index);
-				        return elem;
-				
-				    },
-				
-				    /**
-				     * How many allocated units we have
-				     *
-				     * @type {Number}
-				     */
-				    get length() {
-				        return this.elems.length - this.freeElems.length;
-				    },
-				
-				    /**
-				     * Make pool bigger by the default growth parameters.
-				     *
-				     */
-				    expand : function() {
-				
-				        var oldSize = this.elems.length;
-				
-				        var growth = Math.ceil(this.elems.length * this.expandFactor);
-				
-				        if(growth < this.expandMinUnits) {
-				            growth = this.expandMinUnits;
-				        }
-				
-				        this.elems.length = this.elems.length + growth;
-				
-				        for(var i=oldSize; i<this.elems.length; i++) {
-				            this.elems[i] = this.allocator();
-				            this.freeElems.push(i);
-				        }
-				    },
-				
-				    /**
-				     * Deallocate object at index n
-				     *
-				     * @param  {Number} n
-				     * @return {Object} discarded object
-				     */
-				    discard : function(n) {
-				
-				        // Cannot double deallocate
-				        if(this.freeElems.indexOf(n) >= 0) {
-				            return;
-				        }
-				
-				        this.freeElems.push(n);
-				    },
-				
-				    /**
-				     * Return object at pool index n
-				     */
-				    get : function(n) {
-				        return this.elems[n];
+				  make: function() {
+				    if(!this.freeElems.length) {
+				      this.expand();
 				    }
 				
+				    // See if we have any allocated elements to reuse
+				    var index = this.freeElems.pop();
+				    var elem = this.elems[index];
+				    this.resetor(elem, index);
+				    return elem;
+				  },
 				
-				};
+				  getLength: function() {
+				    return this.elems.length - this.freeElems.length;
+				  },
 				
-				module.exports = Pool;
+				  expand : function() {
+				
+				    var oldSize = this.elems.length;
+				
+				    var growth = Math.ceil(this.elems.length * this.expandFactor);
+				
+				    if(growth < this.expandMinUnits) {
+				      growth = this.expandMinUnits;
+				    }
+				
+				    this.elems.length = this.elems.length + growth;
+				
+				    for(var i=oldSize; i<this.elems.length; i++) {
+				      this.elems[i] = this.allocator();
+				      this.freeElems.push(i);
+				    }
+				  },
+				
+				  discard : function(n) {
+				
+				    // Cannot double deallocate
+				    if(this.freeElems.indexOf(n) >= 0) {
+				      return;
+				    }
+				
+				    this.freeElems.push(n);
+				  },
+				
+				  // Return object at pool index n
+				  get : function(n) {
+				    return this.elems[n];
+				  }
+				
+				});
 			},
 			"System.js": function (exports, module, require) {
 				/*jslint unused: false */
@@ -573,11 +533,9 @@
 				
 				module.exports = Base.extend({
 				
-				  has: [],
+				  uses: [],
+				  enabled: true,
 				  
-				  //TODO: build filters by Tag
-				  //tagged: [],
-				
 				  initialize: function(options){ },
 				  process: function(delta, entities) { }
 				
@@ -612,6 +570,8 @@
 				
 				    describe("Components", function(){
 				
+				      it("should work with a component pool");
+				
 				      describe("#add", function(){
 				        
 				        it ("should add a component", function(){
@@ -621,9 +581,6 @@
 				          expect(entity._components).to.be.a("object");
 				          expect(entity._components["position"]).to.be.eql({ x:0, y: 0 });
 				        });
-				
-				        it ("should validate if the component exists");
-				        it ("should create a component with default values");
 				
 				      });
 				
@@ -670,6 +627,18 @@
 				        
 				      });
 				
+				      describe("#is", function(){
+				        
+				        it ("should return true or false if the entity has a component type", function(){
+				          expect(entity.is).to.be.a("function");
+				
+				          expect(entity.is("position")).to.be.equal(true);
+				          expect(entity.is("velocity")).to.be.equal(true);
+				          expect(entity.is("xcomponent")).to.be.equal(false);
+				        });
+				        
+				      });
+				
 				      describe("#set", function(){
 				        
 				        it ("should set a component's value by type", function(){
@@ -687,8 +656,6 @@
 				          expect(cv.dx).to.be.equal(7);
 				          expect(cv.dy).to.be.equal(8);
 				        });
-				
-				        it ("should validate the data");
 				        
 				      });
 				
@@ -705,49 +672,7 @@
 				          expect(entity.has("position")).to.be.equal(true);
 				        });
 				
-				        it ("should validate the data");
-				        
 				      });
-				    });
-				
-				    describe("Tags", function(){
-				
-				      describe("#addTag", function(){
-				        
-				        it ("should add a tag", function(){
-				          expect(entity.addTag).to.be.a("function");
-				
-				          entity.addTag("player");
-				          entity.addTag("monster");
-				          expect(entity.tags).to.be.an("array");
-				          expect(entity.tags.length).to.be.equal(2);
-				        });
-				
-				      });
-				
-				      describe("#removeTag", function(){
-				        
-				        it ("should remove a tag", function(){
-				          expect(entity.removeTag).to.be.a("function");
-				
-				          entity.removeTag("player");
-				          expect(entity.tags).to.be.an("array");
-				          expect(entity.tags.length).to.be.equal(1);
-				        });
-				
-				      });
-				
-				      describe("#hasTag", function(){
-				        
-				        it ("should tell if it has a tag", function(){
-				          expect(entity.hasTag).to.be.a("function");
-				
-				          expect(entity.hasTag("player")).to.be.equal(false);
-				          expect(entity.hasTag("monster")).to.be.equal(true);
-				        });
-				
-				      });
-				
 				    });
 				
 				    describe("#destroy", function(){
@@ -848,44 +773,6 @@
 				
 				    });
 				
-				    describe("#getTagged", function(){
-				      var ids = [];
-				
-				      before(function(){
-				        var entity;
-				        
-				        entity = entities.make();
-				        entity.addTag("animal");
-				        entity.addTag("bird");
-				        ids.push(entity.id);
-				
-				        entity = entities.make();
-				        entity.addTag("animal");
-				        ids.push(entity.id);
-				
-				        entity = entities.make();
-				        entity.addTag("dog");
-				        ids.push(entity.id);
-				      });
-				
-				      it("should return an array of entities by tag", function(){
-				        expect(entities.getTagged).to.be.a("function");
-				
-				        var found = entities.getTagged("animal");
-				        expect(found).to.be.an("array");
-				        expect(found.length).to.be.equal(2);
-				
-				        found = entities.getTagged("bird");
-				        expect(found).to.be.an("array");
-				        expect(found.length).to.be.equal(1);
-				
-				        found = entities.getTagged(["bird", "dog"]);
-				        expect(found).to.be.an("array");
-				        expect(found.length).to.be.equal(2);
-				      });
-				
-				    });
-				
 				  });
 				};
 			},
@@ -910,7 +797,17 @@
 				    var game;
 				
 				    before(function(){
-				      game = Game.create();
+				      game = Game.create({
+				        testOption: 12345,
+				        testOptObj: {
+				          x: 10,
+				          y: 60
+				        }
+				      });
+				
+				      expect(game.testOption).to.be.equal(12345);
+				      expect(game.testOptObj.x).to.be.equal(10);
+				      expect(game.testOptObj.y).to.be.equal(60);
 				    });
 				
 				    describe('#addSystem', function(){
@@ -918,11 +815,12 @@
 				      it ('should allow to add systems', function(){
 				        expect(game.addSystem).to.be.a('function');
 				
-				        game.addSystem(MovementSystem.create({ gravity: 1.5 }));
+				        game.addSystem("movement", MovementSystem.create({ gravity: 1.5 }));
 				
 				        expect(game._systems).to.be.an('array');
 				        expect(game._systems.length).to.be.equal(1);
 				
+				        expect(game._systemsByName["movement"]).to.be.ok();
 				        expect(game._systems[0].gravity).to.be.equal(1.5);
 				      });
 				
@@ -944,8 +842,24 @@
 				        }).to.throwError();
 				      });
 				
-				      it ('should allow to register a collection of components');
+				    });
 				
+				    describe('#disable', function(){
+				      it ('should allow to disable a system by name', function(){
+				        expect(game.disable).to.be.a('function');
+				
+				        game.disable("movement");
+				        expect(game._systems[0].enabled).to.be.equal(false);
+				      });
+				    });
+				
+				    describe('#enable', function(){
+				      it ('should allow to enable a system by name', function(){
+				        expect(game.enable).to.be.a('function');
+				
+				        game.enable("movement");
+				        expect(game._systems[0].enabled).to.be.equal(true);
+				      });
 				    });
 				
 				    describe('#start', function(){
@@ -971,7 +885,7 @@
 				
 				var SystemTest = System.extend({
 				
-				  has: ['position', 'velocity'],
+				  uses: ['ca', 'cb'],
 				
 				  initialize: function(options) {
 				    this.gravity = 0.5;
@@ -984,26 +898,94 @@
 				});
 				
 				module.exports = function(){
-				  var game;
 				
-				  before(function(){
+				  describe("SystemSpec", function(){
+				    var game, testSystem, entities = [], spyProcess;
 				
-				    game = Game.create({
-				      poolSize: 500
-				    });
-				
-				    game.addSystem(SystemTest.create());
-				    
-				  });
-				
-				  describe('System', function(){
-				
-				    it ('should test the systems', function(){
+				    before(function(){
 				      
+				      game = Game.create();
+				      testSystem = SystemTest.create();
+				
+				      game.addSystem("test", testSystem);
+				
+				      var entity;
+				      entity = game.entities.make();
+				      entity.add("ca");
+				      entity.add("cb");
+				      entity.add("cc");
+				      entities.push(entity);
+				
+				      entity = game.entities.make();
+				      entity.add("ca");
+				      entity.add("cb");
+				      entities.push(entity);
+				
+				      entity = game.entities.make();
+				      entity.add("cd");
+				      entities.push(entity);
+				
+				      spyProcess = sinon.spy(testSystem, "process");
 				    });
 				
-				  });
+				    describe('System', function(){
 				
+				      it ('should run the system with the corresponding entities', function(done){
+				        
+				        game.start();
+				
+				        setTimeout(function(){
+				          game.stop();
+				          expect(spyProcess.called).to.be.ok();
+				          expect(spyProcess.args[0][1].length).to.be.equal(2);
+				          spyProcess.reset();
+				          done();
+				        }, 100);
+				
+				      });
+				  
+				      it ('should run the system with the corresponding entities #2', function(done){
+				        entities[0].remove("cb");
+				
+				        game.start();
+				        setTimeout(function(){
+				          game.stop();
+				          expect(spyProcess.called).to.be.ok();
+				          expect(spyProcess.args[0][1].length).to.be.equal(1);
+				          spyProcess.reset();
+				          done();
+				        }, 100);
+				
+				      });
+				
+				      it ('should not run a disabled system', function(done){
+				        
+				        game.disable("test");
+				        game.start();
+				        setTimeout(function(){
+				          game.stop();
+				          expect(spyProcess.called).to.be.equal(false);
+				          spyProcess.reset();
+				          done();
+				        }, 100);
+				
+				      });
+				
+				      it ('should run an enabled system', function(done){
+				        
+				        game.enable("test");
+				        game.start();
+				        setTimeout(function(){
+				          game.stop();
+				          expect(spyProcess.called).to.be.equal(true);
+				          spyProcess.reset();
+				          done();
+				        }, 100);
+				
+				      });
+				  
+				    });
+				  });
 				};
 			},
 			"runner.js": function (exports, module, require) {
