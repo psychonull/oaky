@@ -62,8 +62,11 @@ var MovementSystem = oaky.System.extend({
     // will be called on each game loop iteration
     // sending a delta time and the entities which 
     // which have the expected components 
-    // (or all if "has" property was not specified.
-    process: function(delta, entities) { }
+    // (or none if "uses" property is not specified.
+    process: function(delta, entities) {
+        // access to the EntityManager from the system
+        var newEntity = this.game.entities.make();
+    }
 });
 ```
 
@@ -81,8 +84,8 @@ game.addSystem("movement", movement);
 ### Enabling and Disabling Systems
 ```javascript
 
-movement.enabled();
-movement.disabled();
+movement.enabled = false;
+movement.enabled = true;
 
 // or from the Game instance
 
@@ -90,6 +93,8 @@ this.game.enable("movement");
 this.game.disable("movement");
 
 ```
+
+> By default all systems are enabled
 
 #### Managing Entities
 

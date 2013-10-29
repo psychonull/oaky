@@ -323,7 +323,6 @@
 				    this.tLoop = null;
 				    this.paused = false;
 				    this.boundGameRun = this.gameRun.bind(this);
-				    this.ents = [];
 				  },
 				
 				  addSystem: function(name, system){
@@ -357,20 +356,12 @@
 				        continue;
 				      }
 				
-				      var entities = this.entities.pool.elems;
-				
 				      if (system.uses && system.uses.length > 0) {
-				        entities = this.entities.get(system.uses);
+				        var entities = this.entities.get(system.uses);
 				        system.process(this.gameTime.frameTime, entities);
 				      }
 				      else {
-				        this.ents.length = 0;
-				        for(var j=entities.length; j--;){
-				          if (entities[j].id){
-				            this.ents.push(entities[j]);
-				          }
-				        }
-				        system.process(this.gameTime.frameTime, this.ents);
+				        system.process(this.gameTime.frameTime);
 				      }
 				    }
 				  },
@@ -897,17 +888,32 @@
 				
 				});
 				
+				var SystemNoEntities = System.extend({
+				
+				  process: function(delta, entities) {
+				
+				  }
+				
+				});
+				
 				module.exports = function(){
 				
 				  describe("SystemSpec", function(){
-				    var game, testSystem, entities = [], spyProcess;
+				    var game, 
+				      testSystem, 
+				      testSystemNoEntities, 
+				      entities = [], 
+				      spyProcessNoEntities,
+				      spyProcess;
 				
 				    before(function(){
 				      
 				      game = Game.create();
 				      testSystem = SystemTest.create();
+				      testSystemNoEntities = SystemNoEntities.create();
 				
 				      game.addSystem("test", testSystem);
+				      game.addSystem("noEntities", testSystemNoEntities);
 				
 				      var entity;
 				      entity = game.entities.make();
@@ -926,11 +932,12 @@
 				      entities.push(entity);
 				
 				      spyProcess = sinon.spy(testSystem, "process");
+				      spyProcessNoEntities = sinon.spy(testSystemNoEntities, "process");
 				    });
 				
 				    describe('System', function(){
 				
-				      it ('should run the system with the corresponding entities', function(done){
+				      it ('should run the systems with the corresponding entities', function(done){
 				        
 				        game.start();
 				
@@ -938,7 +945,11 @@
 				          game.stop();
 				          expect(spyProcess.called).to.be.ok();
 				          expect(spyProcess.args[0][1].length).to.be.equal(2);
+				
+				          expect(spyProcessNoEntities.called).to.be.ok();
+				          expect(spyProcessNoEntities.args[0][1]).to.be(undefined);
 				          spyProcess.reset();
+				          spyProcessNoEntities.reset();
 				          done();
 				        }, 100);
 				

@@ -16,17 +16,32 @@ var SystemTest = System.extend({
 
 });
 
+var SystemNoEntities = System.extend({
+
+  process: function(delta, entities) {
+
+  }
+
+});
+
 module.exports = function(){
 
   describe("SystemSpec", function(){
-    var game, testSystem, entities = [], spyProcess;
+    var game, 
+      testSystem, 
+      testSystemNoEntities, 
+      entities = [], 
+      spyProcessNoEntities,
+      spyProcess;
 
     before(function(){
       
       game = Game.create();
       testSystem = SystemTest.create();
+      testSystemNoEntities = SystemNoEntities.create();
 
       game.addSystem("test", testSystem);
+      game.addSystem("noEntities", testSystemNoEntities);
 
       var entity;
       entity = game.entities.make();
@@ -45,11 +60,12 @@ module.exports = function(){
       entities.push(entity);
 
       spyProcess = sinon.spy(testSystem, "process");
+      spyProcessNoEntities = sinon.spy(testSystemNoEntities, "process");
     });
 
     describe('System', function(){
 
-      it ('should run the system with the corresponding entities', function(done){
+      it ('should run the systems with the corresponding entities', function(done){
         
         game.start();
 
@@ -57,7 +73,11 @@ module.exports = function(){
           game.stop();
           expect(spyProcess.called).to.be.ok();
           expect(spyProcess.args[0][1].length).to.be.equal(2);
+
+          expect(spyProcessNoEntities.called).to.be.ok();
+          expect(spyProcessNoEntities.args[0][1]).to.be(undefined);
           spyProcess.reset();
+          spyProcessNoEntities.reset();
           done();
         }, 100);
 

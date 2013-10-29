@@ -323,7 +323,6 @@
 				    this.tLoop = null;
 				    this.paused = false;
 				    this.boundGameRun = this.gameRun.bind(this);
-				    this.ents = [];
 				  },
 				
 				  addSystem: function(name, system){
@@ -357,20 +356,12 @@
 				        continue;
 				      }
 				
-				      var entities = this.entities.pool.elems;
-				
 				      if (system.uses && system.uses.length > 0) {
-				        entities = this.entities.get(system.uses);
+				        var entities = this.entities.get(system.uses);
 				        system.process(this.gameTime.frameTime, entities);
 				      }
 				      else {
-				        this.ents.length = 0;
-				        for(var j=entities.length; j--;){
-				          if (entities[j].id){
-				            this.ents.push(entities[j]);
-				          }
-				        }
-				        system.process(this.gameTime.frameTime, this.ents);
+				        system.process(this.gameTime.frameTime);
 				      }
 				    }
 				  },
