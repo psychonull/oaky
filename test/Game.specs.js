@@ -95,6 +95,29 @@ module.exports = function(){
       });
     });
 
+    describe('#destroy', function(){
+      it('should expose a destroy method to clear the entire game', function(){
+        expect(game.destroy).to.be.a('function');
+        
+        var dtBefore, dtAfter;
+
+        game.on("before:destroy", function(){
+          dtBefore = new Date();
+        });
+
+        game.on("after:destroy", function(){
+          dtAfter = new Date();
+        });
+
+        game.destroy();
+
+        expect(game._components).to.be.equal(null);
+        expect(dtBefore).to.be.ok();
+        expect(dtAfter).to.be.ok();
+        expect(dtAfter.getTime() + dtAfter.getMilliseconds())
+          .to.be.greaterThan(dtBefore.getTime() + dtBefore.getMilliseconds());
+      });
+    });
 
   });
 };

@@ -117,6 +117,19 @@ game.pause();
 game.stop();
 ```
 
+#### Game destroy
+```javascript
+game.on("before:destroy", function(){
+    // game is about to be destroyed 
+});
+
+game.on("after:destroy", function(){
+    // game has been destroyed (not yet events) 
+});
+
+game.destroy();
+```
+
 ### TODO
 * Build up an NPM module to use oaky from NodeJS.
 * Version of oaky

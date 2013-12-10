@@ -291,6 +291,11 @@
 				  destroyEntity: function(entity){
 				    entity.id = null;
 				    this.pool.discard(entity.index);
+				  },
+				
+				  destroy: function(){
+				    this.pool.destroy();
+				    this.lastId = 0;
 				  }
 				
 				});
@@ -323,6 +328,29 @@
 				    this.tLoop = null;
 				    this.paused = false;
 				    this.boundGameRun = this.gameRun.bind(this);
+				
+				    this._events = {
+				        "before:destroy": null
+				      , "after:destroy": null
+				    };
+				
+				  },
+				
+				  on: function(evName, callback){
+				    if (!this._events[evName]){
+				      this._events[evName] = [];
+				    }
+				
+				    this._events[evName].push(callback);
+				    return this;
+				  },
+				
+				  off: function(evName){
+				    if (this._events[evName]){
+				      this._events[evName].length = 0;
+				    }
+				
+				    return this;
 				  },
 				
 				  addSystem: function(name, system){
@@ -395,6 +423,46 @@
 				  gameRun: function(){
 				    if (this.gameTime.tick()) { this.loop(); }
 				    this.tLoop = window.requestAnimationFrame(this.boundGameRun);
+				  },
+				
+				  destroy: function(){
+				    var i;
+				
+				    var beforeDestroy = this._events["before:destroy"];
+				    if (beforeDestroy){
+				      for(i = 0; i < beforeDestroy.length; i++){
+				        beforeDestroy[i]();
+				      }
+				    }
+				
+				    if (!this.paused){
+				      this.stop();
+				    }
+				
+				    this._components = null;
+				    this._systems.length = 0;
+				    this._systemsByName = null;
+				
+				    this.entities.destroy();
+				
+				    this.gameTime.reset();
+				
+				    this.tLoop = null;
+				    this.paused = false;
+				    this.boundGameRun = null;
+				
+				    var afterDestroy = this._events["after:destroy"];
+				    if (afterDestroy){
+				      for(i = 0; i < afterDestroy.length; i++){
+				        afterDestroy[i]();
+				      }
+				    }
+				
+				    for (var ev in this._events){
+				      if (this._events.hasOwnProperty(ev)){
+				        this.off(ev);
+				      }
+				    }
 				  }
 				
 				});
@@ -513,6 +581,11 @@
 				  // Return object at pool index n
 				  get : function(n) {
 				    return this.elems[n];
+				  },
+				
+				  destroy: function(){
+				    this.elems.length = 0;
+				    this.freeElems.length = 0;
 				  }
 				
 				});
@@ -865,6 +938,29 @@
 				      });
 				    });
 				
+				    describe('#destroy', function(){
+				      it('should expose a destroy method to clear the entire game', function(){
+				        expect(game.destroy).to.be.a('function');
+				        
+				        var dtBefore, dtAfter;
+				
+				        game.on("before:destroy", function(){
+				          dtBefore = new Date();
+				        });
+				
+				        game.on("after:destroy", function(){
+				          dtAfter = new Date();
+				        });
+				
+				        game.destroy();
+				
+				        expect(game._components).to.be.equal(null);
+				        expect(dtBefore).to.be.ok();
+				        expect(dtAfter).to.be.ok();
+				        expect(dtAfter.getTime() + dtAfter.getMilliseconds())
+				          .to.be.greaterThan(dtBefore.getTime() + dtBefore.getMilliseconds());
+				      });
+				    });
 				
 				  });
 				};
